@@ -6,6 +6,35 @@ The default `Analyze(text)` path is designed for production sending pipelines: i
 
 Full visual diagnostics are available through `AnalyzeDetailed(text)` and report renderers. Diagnostic/reporting APIs intentionally return slices/strings/JSON/HTML, so they are separated from the allocation-free hot path.
 
+### Strict GSM cleaner for pasted UCS-2 text
+
+Use `CleanTextToGSM` / `CleanToGSM` when users paste text that may contain UCS-2-forcing characters, hidden zero-width controls, rich-text punctuation, fullwidth/math letters, non-ASCII decimal digits, regional indicator letters, or Greek/Cyrillic/Latin homoglyphs that visually look like English letters. Known characters are mapped to GSM-7-safe text; zero-width/default-ignorable characters are removed; unknown non-GSM characters are dropped.
+
+```go
+cleaned := smslite.CleanTextToGSM("ΡΑΥΡΑL H\u200Be\u200Cl\u200Dl\u2060o 𝓗𝓮𝓵𝓵𝓸 café “ok”—₹🙂")
+// cleaned == "PAYPAL Hello Hello cafe \"ok\"-Rs"
+// smslite.IsGSM7(cleaned) == true
+```
+
+
+Additional convenience APIs:
+
+```go
+cleaned := smslite.CleanToGSM(input)
+if smslite.RequiresUCS2(input) {
+    cleaned = smslite.CleanToGSM(input)
+}
+```
+
+For UI/API diagnostics use `CleanForGSM7`, which returns the cleaned text plus replacement/removal counts and per-rune suggestions:
+
+```go
+res := smslite.CleanForGSM7(input)
+fmt.Println(res.Cleaned, res.Encoding, res.Mapped, res.Removed)
+```
+
+The cleaner includes explicit zero-width/default-ignorable coverage for `U+00AD`, `U+034F`, `U+061C`, `U+115F`, `U+1160`, `U+17B4..U+17B5`, `U+180B..U+180F`, `U+200B..U+200F`, `U+202A..U+202E`, `U+2060..U+206F`, `U+3164`, `U+FFA0`, `U+FE00..U+FE0F`, `U+FEFF`, `U+FFF9..U+FFFB`, `U+1BCA0..U+1BCA3`, `U+1D173..U+1D17A`, `U+E0000..U+E007F`, and `U+E0100..U+E01EF`, plus every Unicode `Cf` format-control rune and combining mark category known to Go.
+
 ## Features
 
 - GSM-7 default alphabet detection.
@@ -22,7 +51,7 @@ Full visual diagnostics are available through `AnalyzeDetailed(text)` and report
 - Smart punctuation normalization suggestions.
 - Billing helpers.
 - CLI: `smsanalyze`.
-- Examples for hot path, detailed reports, UCS2 positions, invisible characters, multipart, UDH, normalization, reports, and CLI.
+- Examples for hot path, detailed reports, UCS2 positions, invisible characters, multipart, UDH, normalization, strict cleaning, reports, and CLI.
 
 ## Install
 
@@ -40,6 +69,7 @@ go run ./cmd/smsanalyze -ucs2 "Hello नमस्ते 🙂"
 go run ./cmd/smsanalyze -invisible $'A\u2060B\u2066C\u2069'
 go run ./cmd/smsanalyze -html "Hello World" > report.html
 echo 'Hello “smart quotes”' | go run ./cmd/smsanalyze -normalize
+echo 'ΡΑΥΡΑL H\u200Be\u200Cl\u200Dl 🙂' | go run ./cmd/smsanalyze -clean
 ```
 
 ## Hot path API: zero allocations

@@ -195,3 +195,63 @@ func TestInvisibleCharactersInAnalysis(t *testing.T) {
 		t.Fatalf("bidi details missing: %#v %#v", a.InvisibleCharacters[0], a.Characters[3])
 	}
 }
+
+func TestCleanTextToGSMRobustMappings(t *testing.T) {
+	in := "ΡΑΥΡΑL раураl H\u200Be\u200Cl\u200Dl\u2060o 𝓗𝓮𝓵𝓵𝓸 Ｂｉｇ café “ok”—₹🙂"
+	got := CleanTextToGSM(in)
+	want := "PAYPAL paypal Hello Hello Big cafe \"ok\"-Rs"
+	if got != want {
+		t.Fatalf("cleaned=%q want %q", got, want)
+	}
+	if !IsGSM7(got) {
+		t.Fatalf("cleaned text must be GSM-7: %q", got)
+	}
+}
+
+func TestCleanForGSM7ReportsMappingAndRemoval(t *testing.T) {
+	res := CleanForGSM7("A\u200BB🙂é")
+	if res.Cleaned != "ABe" || res.Encoding != EncodingGSM7 || !res.Changed {
+		t.Fatalf("bad clean result: %+v", res)
+	}
+	if res.Mapped == 0 || res.Removed != 2 {
+		t.Fatalf("bad counts: mapped=%d removed=%d replacements=%+v", res.Mapped, res.Removed, res.Replacements)
+	}
+}
+
+func TestCleanToGSMUserSampleMappings(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "zero width removed", in: "Hel\u200Blo\u200D World\uFEFF", want: "Hello World"},
+		{name: "smart punctuation", in: "“Hello”—it’s OK…", want: "\"Hello\"-it's OK..."},
+		{name: "greek and cyrillic spoof letters", in: "Ρаураl ΑΒС", want: "Paypal ABC"},
+		{name: "fullwidth", in: "Ｈｅｌｌｏ １２３！", want: "Hello 123!"},
+		{name: "math styled", in: "𝐇𝐞𝐥𝐥𝐨 𝟙𝟚𝟛", want: "Hello 123"},
+		{name: "accented latin", in: "Café Noël São Paulo", want: "Cafe Noel Sao Paulo"},
+		{name: "unsupported removed", in: "OTP is 123456 ✅ 🔥", want: "OTP is 123456  "},
+	}
+
+	for _, tt := range tests {
+		got := CleanToGSM(tt.in)
+		if got != tt.want {
+			t.Fatalf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+		if !IsGSM7(got) {
+			t.Fatalf("%s: cleaned value must be GSM-7: %q", tt.name, got)
+		}
+	}
+}
+
+func TestCleanToGSMExtraDigitAndInvisibleCoverage(t *testing.T) {
+	in := "OTP १२३ ۱۲۳ ١٢٣\U0001F1F3\U0001F1F5\U000E0001\u034Fµ Чч"
+	want := "OTP 123 123 123NPu Yy"
+	got := CleanToGSM(in)
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if RequiresUCS2(got) {
+		t.Fatalf("cleaned output must not require UCS-2: %q", got)
+	}
+}

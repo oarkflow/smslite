@@ -15,6 +15,7 @@ func main() {
 	ucs2Out := flag.Bool("ucs2", false, "print only UCS-2 forcing character positions with characters")
 	invisOut := flag.Bool("invisible", false, "print invisible/zero-width/bidi/format character positions with characters")
 	normalize := flag.Bool("normalize", false, "print GSM-7 normalization suggestion")
+	clean := flag.Bool("clean", false, "strictly clean pasted text to GSM-7 by mapping known Unicode/confusable characters and dropping unknown non-GSM characters")
 	flag.Parse()
 	text := strings.Join(flag.Args(), " ")
 	if text == "" {
@@ -24,6 +25,11 @@ func main() {
 	if *normalize {
 		n := smslite.NormalizeForGSM7(text)
 		fmt.Println(n.Normalized)
+		return
+	}
+	if *clean {
+		c := smslite.CleanForGSM7(text)
+		fmt.Println(c.Cleaned)
 		return
 	}
 	if *invisOut {
